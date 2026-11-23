@@ -9,6 +9,8 @@ const ansicolor = require('ansicolor').nice;
 function searchModule(moduleName, requiredBy) {
     var selfBuiltPackages = ['yargs', 'execa', 'express', 'send', 'async', 'mz/child_process', 'denodeify','commander', 'platform-command', 'grunt', 'pm', 'boom', 'async'];
     selfBuiltPackages = selfBuiltPackages.concat(['mongodb', 'monk']);
+    // FAST_NO_PACKAGE_MODELS (Wenyuan's fix 07404f5): the packages above come from node_modules, not from FAST's models
+    if (process.env.FAST_NO_PACKAGE_MODELS) selfBuiltPackages = [];
     if (builtInModules.includes(moduleName) || selfBuiltPackages.indexOf(moduleName) >= 0) {
         // console.error(`${moduleName.blue.bright} is a built-in module.`);
         let searchPaths = new Set();
