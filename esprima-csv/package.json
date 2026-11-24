@@ -6,9 +6,9 @@
   "dependencies": {
     "ansicolor": "^1.1.84",
     "commander": "^3.0.2",
-    "esprima": "^4.0.1"
+    "esprima": "^4.0.1",
+    "esprima-next": "6.0.3"
   },
-  "devDependencies": {},
   "scripts": {
     "test": "node ./main.js test1.js"
   },

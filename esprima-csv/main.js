@@ -7,7 +7,11 @@ var delimiter; // '\t' or ','
 
 const path = require('path');
 const fs = require('fs');
-const esprima = require('esprima');
+// FAST_MODERN_PARSER: esprima-next, which parses ES2018-ES2022, with modernize.js rewriting its new node types into
+// those of esprima 4; without it, esprima 4 as in FAST
+const MODERN_PARSER = !!process.env.FAST_MODERN_PARSER;
+const esprima = MODERN_PARSER ? require('esprima-next') : require('esprima');
+const modernize = MODERN_PARSER ? require('./modernize') : null;
 const os = require('os');
 const ansicolor = require('ansicolor').nice;
 const Readable = require('stream').Readable;
@@ -135,7 +139,10 @@ if (outputStyle == 'php') {
 
 function getCode(node, sourceCode) {
     /* get corresponding source code string of a node */
-    if (node.range) {
+    if (node.syntheticCode !== undefined) {
+        // a node that modernize.js made (FAST_MODERN_PARSER) has no text of its own in the source
+        return node.syntheticCode;
+    } else if (node.range) {
         return sourceCode.substr(node.range[0], node.range[1] - node.range[0]).replace(/\n/g, '');
     } else {
         return null;
@@ -3130,6 +3137,7 @@ function analyze(filePath, parentNodeId) {
             tolerant: true,
             attachComment: true
         });
+        if (MODERN_PARSER) root = modernize(root);
         if (root.errors && root.errors.length > 0) {
             console.log('Errors occurred when generating AST:'.lightRed.inverse);
             for (err of root.errors) {
