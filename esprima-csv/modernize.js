@@ -11,6 +11,8 @@
 //   static { ... }     StaticBlock -> a static method __static_block
 //   {...a, b: 1}       an object literal with spread -> Object.assign({}, a, {b: 1})
 //   {c, ...r} = o      a rest element of an object pattern -> the property r (r gets o.r, not the other properties)
+//   [, b] = a          a hole of an array pattern -> the identifier _hole (main.js's addParam reads the name of each
+//                      element of a destructured parameter, and stops on a hole)
 // The rest of the new syntax parses into node types that esprima 4 already has. ES modules (import/export
 // declarations) are converted as before.
 'use strict';
@@ -125,6 +127,9 @@ function lower(node) {
                 property: ident('assign', node) });
             return at(node, { type: 'CallExpression', callee: assign, arguments: args });
         }
+        case 'ArrayPattern':
+            node.elements = node.elements.map(e => e === null ? ident('_hole', node) : e);
+            return node;
         case 'ObjectPattern':
             node.properties = node.properties.map(p => p.type !== 'RestElement' ? p : at(p, { type: 'Property',
                 key: p.argument, computed: false, value: p.argument, kind: 'init', method: false, shorthand: true }));
