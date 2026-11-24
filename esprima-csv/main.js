@@ -12,6 +12,9 @@ const fs = require('fs');
 const MODERN_PARSER = !!process.env.FAST_MODERN_PARSER;
 const esprima = MODERN_PARSER ? require('esprima-next') : require('esprima');
 const modernize = MODERN_PARSER ? require('./modernize') : null;
+// FAST_ESM: esm.js rewrites import and export into the require() and module.exports that FAST follows
+const ESM = !!process.env.FAST_ESM;
+const esm = ESM ? require('./esm') : null;
 const os = require('os');
 const ansicolor = require('ansicolor').nice;
 const Readable = require('stream').Readable;
@@ -3138,6 +3141,7 @@ function analyze(filePath, parentNodeId) {
             attachComment: true
         });
         if (MODERN_PARSER) root = modernize(root);
+        if (ESM && root) root = esm(root);
         if (root.errors && root.errors.length > 0) {
             console.log('Errors occurred when generating AST:'.lightRed.inverse);
             for (err of root.errors) {
