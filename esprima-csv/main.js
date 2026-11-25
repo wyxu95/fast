@@ -7,10 +7,13 @@ var delimiter; // '\t' or ','
 
 const path = require('path');
 const fs = require('fs');
-// FAST_MODERN_PARSER: esprima-next, which parses ES2018-ES2022, with modernize.js rewriting its new node types into
-// those of esprima 4; without it, esprima 4 as in FAST
+// FAST_MODERN_PARSER: a file that esprima 4 rejects is parsed with esprima-next, which reads ES2018-ES2022, and
+// modernize.js rewrites its new node types into those of esprima 4. Every file that esprima 4 parses keeps the AST of
+// esprima 4 (esprima-next rejects some code that esprima 4 tolerates, such as the duplicate parameters of FAST's own
+// builtin_packages/http.js). Without the switch, esprima 4 as in FAST
 const MODERN_PARSER = !!process.env.FAST_MODERN_PARSER;
-const esprima = MODERN_PARSER ? require('esprima-next') : require('esprima');
+const esprima = require('esprima');
+const esprimaNext = MODERN_PARSER ? require('esprima-next') : null;
 const modernize = MODERN_PARSER ? require('./modernize') : null;
 // FAST_ESM: esm.js rewrites import and export into the require() and module.exports that FAST follows
 const ESM = !!process.env.FAST_ESM;
@@ -3134,13 +3137,18 @@ function analyze(filePath, parentNodeId) {
     }
     // parse
     try {
-        var root = esprima.parseModule(sourceCode, {
+        const parseOptions = {
             loc: true,
             range: true,
             tolerant: true,
             attachComment: true
-        });
-        if (MODERN_PARSER) root = modernize(root);
+        };
+        try {
+            var root = esprima.parseModule(sourceCode, parseOptions);
+        } catch (e) {
+            if (!MODERN_PARSER) throw e;
+            root = modernize(esprimaNext.parseModule(sourceCode, parseOptions));
+        }
         if (ESM && root) root = esm(root);
         if (root.errors && root.errors.length > 0) {
             console.log('Errors occurred when generating AST:'.lightRed.inverse);
