@@ -12,7 +12,8 @@
 //   {...a, b: 1}       an object literal with spread -> Object.assign({}, a, {b: 1})
 //   {c, ...r} = o      a rest element of an object pattern -> the property r (r gets o.r, not the other properties)
 //   [, b] = a          a hole of an array pattern -> the identifier _hole (main.js's addParam reads the name of each
-//                      element of a destructured parameter, and stops on a hole)
+//                      element of a destructured parameter, and stops on a hole); this one also applies to the files
+//                      that esprima 4 parses (fillHoles), since esprima 4 gives the same hole
 // The rest of the new syntax parses into node types that esprima 4 already has. ES modules (import/export
 // declarations) are converted as before.
 'use strict';
@@ -128,8 +129,7 @@ function lower(node) {
             return at(node, { type: 'CallExpression', callee: assign, arguments: args });
         }
         case 'ArrayPattern':
-            node.elements = node.elements.map(e => e === null ? ident('_hole', node) : e);
-            return node;
+            return fillHole(node);
         case 'ObjectPattern':
             node.properties = node.properties.map(p => p.type !== 'RestElement' ? p : at(p, { type: 'Property',
                 key: p.argument, computed: false, value: p.argument, kind: 'init', method: false, shorthand: true }));
@@ -143,4 +143,20 @@ function lower(node) {
     }
 }
 
+function fillHole(node) {
+    node.elements = node.elements.map(e => e === null ? ident('_hole', node) : e);
+    return node;
+}
+
+// only the holes of the array patterns, for an AST of esprima 4
+function fillHoles(node) {
+    if (Array.isArray(node)) return node.forEach(fillHoles);
+    if (!node || typeof node !== 'object' || typeof node.type !== 'string') return;
+    for (const k of Object.keys(node)) {
+        if (!SKIP.has(k)) fillHoles(node[k]);
+    }
+    if (node.type === 'ArrayPattern') fillHole(node);
+}
+
 module.exports = lower;
+module.exports.fillHoles = root => (fillHoles(root), root);

@@ -14,9 +14,11 @@ const fs = require('fs');
 const MODERN_PARSER = !!process.env.FAST_MODERN_PARSER;
 const esprima = require('esprima');
 const esprimaNext = MODERN_PARSER ? require('esprima-next') : null;
-const modernize = MODERN_PARSER ? require('./modernize') : null;
 // FAST_ESM: esm.js rewrites import and export into the require() and module.exports that FAST follows
 const ESM = !!process.env.FAST_ESM;
+// with either switch, the holes of array patterns ([, b]) are filled in every file (modernize.js), as FAST's conversion
+// stops on them and the switches make FAST read files that it never reached before
+const modernize = MODERN_PARSER || ESM ? require('./modernize') : null;
 const esm = ESM ? require('./esm') : null;
 const os = require('os');
 const ansicolor = require('ansicolor').nice;
@@ -3149,6 +3151,7 @@ function analyze(filePath, parentNodeId) {
             if (!MODERN_PARSER) throw e;
             root = modernize(esprimaNext.parseModule(sourceCode, parseOptions));
         }
+        if ((MODERN_PARSER || ESM) && root) root = modernize.fillHoles(root);
         if (ESM && root) root = esm(root);
         if (root.errors && root.errors.length > 0) {
             console.log('Errors occurred when generating AST:'.lightRed.inverse);
