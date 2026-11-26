@@ -56,6 +56,8 @@ const PATTERNS = new Set(['Identifier', 'ObjectPattern', 'ArrayPattern', 'Assign
 function isTypeOnly(n) {
     if (TYPE_ONLY.has(n.type)) return true;
     if (n.declare) return true;  // declare const/class/function/module, declare fields
+    if (n.abstract && (n.type === 'MethodDefinition' || n.type === 'PropertyDefinition')) return true;
+    if (n.type === 'MethodDefinition' && n.value && !n.value.body) return true;  // method overload signature
     if (n.type === 'TSModuleDeclaration' && !n.body) return true;
     if ((n.type === 'ImportDeclaration' || n.type === 'ExportNamedDeclaration' || n.type === 'ExportAllDeclaration') &&
         (n.importKind === 'type' || n.importKind === 'typeof' || n.exportKind === 'type')) return true;
