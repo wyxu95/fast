@@ -6,6 +6,9 @@ const path = require('path');
 const builtInModules = require('module').builtinModules;
 const ansicolor = require('ansicolor').nice;
 
+// FAST_BABEL: TypeScript and JSX sources are modules too
+const SOURCE_EXTENSIONS = process.env.FAST_BABEL ? ['.ts', '.tsx', '.mts', '.cts', '.jsx'] : [];
+
 function searchModule(moduleName, requiredBy) {
     var selfBuiltPackages = ['yargs', 'execa', 'express', 'send', 'async', 'mz/child_process', 'denodeify','commander', 'platform-command', 'grunt', 'pm', 'boom', 'async'];
     selfBuiltPackages = selfBuiltPackages.concat(['mongodb', 'monk']);
@@ -79,6 +82,20 @@ function searchModule(moduleName, requiredBy) {
                 found = true;
                 modulePath = currentPath;
                 mainPath = currentPath;
+                break;
+            }
+        }
+        if (!found && SOURCE_EXTENSIONS.length) {
+            // './foo' or './foo.js' for foo.ts (the import of a TypeScript source), or a folder's index.ts
+            const base = path.resolve(p, moduleName);
+            const stem = base.replace(/\.(c|m)?js$/, '');
+            const hit = SOURCE_EXTENSIONS.map(e => stem + e).concat(SOURCE_EXTENSIONS.map(e => path.join(base, 'index' + e)))
+                .find(c => fs.existsSync(c) && fs.statSync(c).isFile());
+            if (hit) {
+                console.error(`Package ${moduleName} found at ${hit}`.white.inverse);
+                found = true;
+                modulePath = hit;
+                mainPath = hit;
                 break;
             }
         }

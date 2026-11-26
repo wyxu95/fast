@@ -18,9 +18,15 @@ const esprimaNext = MODERN_PARSER ? require('esprima-next') : null;
 // FAST_ESM_LAZY (implies FAST_ESM): an import loads its module where the code uses the imported name
 const ESM_LAZY = !!process.env.FAST_ESM_LAZY;
 const ESM = !!process.env.FAST_ESM || ESM_LAZY;
-// with either switch, the holes of array patterns ([, b]) are filled in every file (modernize.js), as FAST's conversion
-// stops on them and the switches make FAST read files that it never reached before
-const modernize = MODERN_PARSER || ESM ? require('./modernize') : null;
+// FAST_BABEL: what all parsers above reject is parsed in turn as a script (sloppy mode: package, static, yield as
+// names) and with @babel/parser (TypeScript, Flow, JSX, decorators, the newest syntax), which babel-lower.js and
+// modernize.js rewrite into nodes that this converter knows; a shebang line ending in \r\n is removed too
+const BABEL = !!process.env.FAST_BABEL;
+const babelParser = BABEL ? require('@babel/parser') : null;
+const babelLower = BABEL ? require('./babel-lower') : null;
+// with any of the switches, the holes of array patterns ([, b]) are filled in every file (modernize.js), as FAST's
+// conversion stops on them and the switches make FAST read files that it never reached before
+const modernize = MODERN_PARSER || ESM || BABEL ? require('./modernize') : null;
 const esm = ESM ? require('./esm') : null;
 const os = require('os');
 const ansicolor = require('ansicolor').nice;
@@ -3099,6 +3105,37 @@ function walkDir(dir, parentNodeId, callback) {
     });
 };
 
+// the parsers after esprima 4's parseModule, in order; the first error when they all fail
+function parseFallback(source, options, firstError) {
+    const attempts = [];
+    if (BABEL) attempts.push(() => esprima.parseScript(source, options));
+    if (MODERN_PARSER) attempts.push(() => modernize(esprimaNext.parseModule(source, options)));
+    if (MODERN_PARSER && BABEL) attempts.push(() => modernize(esprimaNext.parseScript(source, options)));
+    if (BABEL) attempts.push(() => modernize(babelLower(parseWithBabel(source))));
+    for (const attempt of attempts) {
+        try {
+            return attempt();
+        } catch (e) {
+            // the next parser
+        }
+    }
+    throw firstError;
+}
+
+function parseWithBabel(source) {
+    const ts = /\.(c|m)?tsx?$/.test(filename);
+    const plugins = [['estree', { classFeatures: true }], ts ? 'typescript' : 'flow', 'decorators-legacy'];
+    if (!ts || /\.tsx$/.test(filename)) plugins.push('jsx');
+    const file = babelParser.parse(source, {
+        sourceType: 'unambiguous', ranges: true, errorRecovery: true, createImportExpressions: true,
+        allowReturnOutsideFunction: true, allowAwaitOutsideFunction: true, allowImportExportEverywhere: true,
+        plugins: plugins
+    });
+    const program = file.program;
+    program.errors = file.errors || [];
+    return program;
+}
+
 function analyze(filePath, parentNodeId) {
     try {
     // read the file
@@ -3113,7 +3150,7 @@ function analyze(filePath, parentNodeId) {
         filePath = 0;
     }
     sourceCode = fs.readFileSync(filePath, 'utf8');
-    sourceCode = sourceCode.replace(/^#!.*\n/, '\n');
+    sourceCode = BABEL ? sourceCode.replace(/^\uFEFF?#![^\n]*\n/, '\n') : sourceCode.replace(/^#!.*\n/, '\n');
     sourceCode = sourceCode.replace(/\r\n/g, '\n');
     // initialize
     if (!program.expression) {
@@ -3150,10 +3187,10 @@ function analyze(filePath, parentNodeId) {
         try {
             var root = esprima.parseModule(sourceCode, parseOptions);
         } catch (e) {
-            if (!MODERN_PARSER) throw e;
-            root = modernize(esprimaNext.parseModule(sourceCode, parseOptions));
+            if (!MODERN_PARSER && !BABEL) throw e;
+            root = parseFallback(sourceCode, parseOptions, e);
         }
-        if ((MODERN_PARSER || ESM) && root) root = modernize.fillHoles(root);
+        if ((MODERN_PARSER || ESM || BABEL) && root) root = modernize.fillHoles(root);
         if (ESM && root) root = esm(root, ESM_LAZY);
         if (root.errors && root.errors.length > 0) {
             console.log('Errors occurred when generating AST:'.lightRed.inverse);
